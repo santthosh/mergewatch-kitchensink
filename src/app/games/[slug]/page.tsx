@@ -1,8 +1,6 @@
 import { notFound } from "next/navigation";
 import { games, gamesBySlug } from "@/lib/games";
 
-const validSlug = /^[a-z0-9-]+$/;
-
 export function generateStaticParams() {
   return games.map((game) => ({ slug: game.href.replace("/games/", "") }));
 }
@@ -13,12 +11,7 @@ export default async function GamePage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-
-  if (!slug || !validSlug.test(slug)) {
-    notFound();
-  }
-
-  const game = gamesBySlug[slug];
+  const game = slug ? gamesBySlug[slug] : undefined;
 
   if (!game) {
     notFound();
