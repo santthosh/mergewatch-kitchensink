@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 
 type Cell = "X" | "O" | null;
 type Difficulty = "easy" | "medium" | "hard";
@@ -63,12 +63,13 @@ function minimax(board: Cell[], isMaximizing: boolean): number {
 }
 
 function getBestMove(board: Cell[]): number {
+  const copy = [...board];
   let bestScore = -Infinity;
   let bestMove = -1;
-  for (const i of getEmptyCells(board)) {
-    board[i] = "O";
-    const score = minimax(board, false);
-    board[i] = null;
+  for (const i of getEmptyCells(copy)) {
+    copy[i] = "O";
+    const score = minimax(copy, false);
+    copy[i] = null;
     if (score > bestScore) {
       bestScore = score;
       bestMove = i;
@@ -86,15 +87,13 @@ function getComputerMove(board: Cell[], difficulty: Difficulty): number {
   }
 
   if (difficulty === "medium") {
-    // 50% chance of optimal move
     if (Math.random() < 0.5) {
-      return getBestMove([...board]);
+      return getBestMove(board);
     }
     return empty[Math.floor(Math.random() * empty.length)];
   }
 
-  // hard: always optimal
-  return getBestMove([...board]);
+  return getBestMove(board);
 }
 
 const speedLabels: Record<number, string> = {
@@ -112,6 +111,7 @@ export function TicTacToeGame() {
   const [score, setScore] = useState({ player: 0, computer: 0, draws: 0 });
   const [gameOver, setGameOver] = useState(false);
   const [thinking, setThinking] = useState(false);
+  const computerMoveInProgress = useRef(false);
 
   const winner = checkWinner(board);
   const winningLine = getWinningLine(board);
@@ -122,6 +122,7 @@ export function TicTacToeGame() {
     setIsPlayerTurn(true);
     setGameOver(false);
     setThinking(false);
+    computerMoveInProgress.current = false;
   }, []);
 
   // Handle game over
@@ -142,7 +143,9 @@ export function TicTacToeGame() {
   // Computer move
   useEffect(() => {
     if (isPlayerTurn || gameOver || winner || isDraw) return;
+    if (computerMoveInProgress.current) return;
 
+    computerMoveInProgress.current = true;
     setThinking(true);
     const timeout = setTimeout(() => {
       setBoard((prev) => {
@@ -154,9 +157,13 @@ export function TicTacToeGame() {
       });
       setIsPlayerTurn(true);
       setThinking(false);
+      computerMoveInProgress.current = false;
     }, speed);
 
-    return () => clearTimeout(timeout);
+    return () => {
+      clearTimeout(timeout);
+      computerMoveInProgress.current = false;
+    };
   }, [isPlayerTurn, gameOver, winner, isDraw, difficulty, speed]);
 
   function handleCellClick(index: number) {
