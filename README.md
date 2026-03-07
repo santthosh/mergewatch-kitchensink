@@ -19,7 +19,7 @@ A kitchen sink repository for testing [MergeWatch](https://github.com/santthosh/
 
 ### Prerequisites
 
-- Node.js 18 or later
+- Node.js 20.9.0 or later
 - npm
 
 ### Installation
@@ -68,7 +68,7 @@ This project uses GitHub Actions for continuous integration. The CI workflow run
 
 - **Lint** — runs ESLint checks
 - **Build** — verifies the production build succeeds
-- **Matrix testing** — runs across Node.js 18, 20, and 22
+- **Matrix testing** — runs across Node.js 20 and 22
 
 ## License
 
