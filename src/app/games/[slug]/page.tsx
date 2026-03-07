@@ -1,5 +1,10 @@
 import { notFound } from "next/navigation";
 import { games, gamesBySlug } from "@/lib/games";
+import { TicTacToeGame } from "@/components/games/tic-tac-toe";
+
+const gameComponents: Record<string, React.ComponentType> = {
+  "tic-tac-toe": TicTacToeGame,
+};
 
 export function generateStaticParams() {
   return games.map((game) => ({ slug: game.href.replace("/games/", "") }));
@@ -15,6 +20,16 @@ export default async function GamePage({
 
   if (!game) {
     notFound();
+  }
+
+  const GameComponent = gameComponents[slug];
+
+  if (GameComponent) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] py-8">
+        <GameComponent />
+      </div>
+    );
   }
 
   return (
