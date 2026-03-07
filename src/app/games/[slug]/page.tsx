@@ -1,15 +1,10 @@
 import { notFound } from "next/navigation";
+import { games, gamesBySlug } from "@/lib/games";
 
-const games: Record<string, { name: string }> = {
-  "tic-tac-toe": { name: "Tic Tac Toe" },
-  snake: { name: "Snake" },
-  minesweeper: { name: "Minesweeper" },
-  "memory-match": { name: "Memory Match" },
-  "2048": { name: "2048" },
-};
+const validSlug = /^[a-z0-9-]+$/;
 
 export function generateStaticParams() {
-  return Object.keys(games).map((slug) => ({ slug }));
+  return games.map((game) => ({ slug: game.href.replace("/games/", "") }));
 }
 
 export default async function GamePage({
@@ -18,7 +13,12 @@ export default async function GamePage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const game = games[slug];
+
+  if (!slug || !validSlug.test(slug)) {
+    notFound();
+  }
+
+  const game = gamesBySlug[slug];
 
   if (!game) {
     notFound();
