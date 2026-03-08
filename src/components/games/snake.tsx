@@ -53,11 +53,13 @@ export function SnakeGame() {
   const snakeRef = useRef<Position[]>(snake);
   const foodRef = useRef<Position>(food);
   const gameStateRef = useRef<GameState>(gameState);
+  const scoreRef = useRef<number>(score);
 
   directionRef.current = direction;
   snakeRef.current = snake;
   foodRef.current = food;
   gameStateRef.current = gameState;
+  scoreRef.current = score;
 
   const resetGame = useCallback(() => {
     const newSnake = [
@@ -91,14 +93,14 @@ export function SnakeGame() {
     // Wall collision
     if (newHead.x < 0 || newHead.x >= GRID_SIZE || newHead.y < 0 || newHead.y >= GRID_SIZE) {
       setGameState("gameover");
-      setHighScore((prev) => Math.max(prev, score));
+      setHighScore((prev) => Math.max(prev, scoreRef.current));
       return;
     }
 
     // Self collision
     if (currentSnake.some((s) => s.x === newHead.x && s.y === newHead.y)) {
       setGameState("gameover");
-      setHighScore((prev) => Math.max(prev, score));
+      setHighScore((prev) => Math.max(prev, scoreRef.current));
       return;
     }
 
@@ -113,7 +115,7 @@ export function SnakeGame() {
     }
 
     setSnake(newSnake);
-  }, [score]);
+  }, []);
 
   // Game loop
   useEffect(() => {
