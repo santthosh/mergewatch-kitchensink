@@ -1,9 +1,11 @@
 import { notFound } from "next/navigation";
 import { games, gamesBySlug } from "@/lib/games";
 import { TicTacToeGame } from "@/components/games/tic-tac-toe";
+import { SnakeGame } from "@/components/games/snake";
 
 const gameComponents: Record<string, React.ComponentType> = {
   "tic-tac-toe": TicTacToeGame,
+  snake: SnakeGame,
 };
 
 export function generateStaticParams() {
