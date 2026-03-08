@@ -71,8 +71,8 @@ export function SnakeGame() {
       { x: 8, y: 10 },
     ];
     setSnake(newSnake);
-    // Board has 400 cells and snake starts with 3, so this will always find a cell
-    setFood(randomFood(newSnake)!);
+    const newFood = randomFood(newSnake);
+    if (newFood) setFood(newFood);
     setDirection("RIGHT");
     setScore(0);
     setGameState("playing");
