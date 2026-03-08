@@ -23,15 +23,18 @@ const oppositeDirection: Record<Direction, Direction> = {
   RIGHT: "LEFT",
 };
 
-function randomFood(snake: Position[]): Position {
-  let pos: Position;
-  do {
-    pos = {
-      x: Math.floor(Math.random() * GRID_SIZE),
-      y: Math.floor(Math.random() * GRID_SIZE),
-    };
-  } while (snake.some((s) => s.x === pos.x && s.y === pos.y));
-  return pos;
+function randomFood(snake: Position[]): Position | null {
+  const occupied = new Set(snake.map((s) => `${s.x},${s.y}`));
+  const emptyCells: Position[] = [];
+  for (let x = 0; x < GRID_SIZE; x++) {
+    for (let y = 0; y < GRID_SIZE; y++) {
+      if (!occupied.has(`${x},${y}`)) {
+        emptyCells.push({ x, y });
+      }
+    }
+  }
+  if (emptyCells.length === 0) return null;
+  return emptyCells[Math.floor(Math.random() * emptyCells.length)];
 }
 
 export function SnakeGame() {
@@ -68,7 +71,7 @@ export function SnakeGame() {
       { x: 8, y: 10 },
     ];
     setSnake(newSnake);
-    setFood(randomFood(newSnake));
+    setFood(randomFood(newSnake) ?? { x: 15, y: 10 });
     setDirection("RIGHT");
     setScore(0);
     setGameState("playing");
@@ -109,7 +112,15 @@ export function SnakeGame() {
 
     if (ateFood) {
       setScore((s) => s + 1);
-      setFood(randomFood(newSnake));
+      const nextFood = randomFood(newSnake);
+      if (!nextFood) {
+        // Snake filled the entire board — you win!
+        setSnake(newSnake);
+        setGameState("gameover");
+        setHighScore((prev) => Math.max(prev, scoreRef.current + 1));
+        return;
+      }
+      setFood(nextFood);
     } else {
       newSnake.pop();
     }
