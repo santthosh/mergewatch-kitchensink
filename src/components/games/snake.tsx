@@ -71,7 +71,8 @@ export function SnakeGame() {
       { x: 8, y: 10 },
     ];
     setSnake(newSnake);
-    setFood(randomFood(newSnake) ?? { x: 15, y: 10 });
+    // Board has 400 cells and snake starts with 3, so this will always find a cell
+    setFood(randomFood(newSnake)!);
     setDirection("RIGHT");
     setScore(0);
     setGameState("playing");
@@ -111,13 +112,15 @@ export function SnakeGame() {
     const ateFood = newHead.x === currentFood.x && newHead.y === currentFood.y;
 
     if (ateFood) {
-      setScore((s) => s + 1);
+      const newScore = scoreRef.current + 1;
+      scoreRef.current = newScore;
+      setScore(newScore);
       const nextFood = randomFood(newSnake);
       if (!nextFood) {
         // Snake filled the entire board — you win!
         setSnake(newSnake);
         setGameState("gameover");
-        setHighScore((prev) => Math.max(prev, scoreRef.current + 1));
+        setHighScore((prev) => Math.max(prev, newScore));
         return;
       }
       setFood(nextFood);
