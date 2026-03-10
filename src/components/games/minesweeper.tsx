@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 
 type Difficulty = "beginner" | "intermediate" | "expert";
 
@@ -28,57 +28,87 @@ function createBoard(rows: number, cols: number): CellData[][] {
   );
 }
 
-function placeMines(board: CellData[][], mines: number, safeRow: number, safeCol: number) {
-  const rows = board.length;
-  const cols = board[0].length;
-  let placed = 0;
+function cloneBoard(board: CellData[][]): CellData[][] {
+  return board.map((r) => r.map((c) => ({ ...c })));
+}
 
-  while (placed < mines) {
-    const r = Math.floor(Math.random() * rows);
-    const c = Math.floor(Math.random() * cols);
-    if (board[r][c].mine) continue;
-    if (Math.abs(r - safeRow) <= 1 && Math.abs(c - safeCol) <= 1) continue;
-    board[r][c].mine = true;
-    placed++;
-  }
+function placeMinesOnBoard(board: CellData[][], mines: number, safeRow: number, safeCol: number): CellData[][] {
+  const result = cloneBoard(board);
+  const rows = result.length;
+  const cols = rows > 0 ? result[0].length : 0;
+  if (rows === 0 || cols === 0) return result;
 
+  // Build list of eligible positions and shuffle to avoid unbounded loop
+  const eligible: [number, number][] = [];
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
-      if (board[r][c].mine) continue;
+      if (Math.abs(r - safeRow) <= 1 && Math.abs(c - safeCol) <= 1) continue;
+      eligible.push([r, c]);
+    }
+  }
+
+  // Fisher-Yates shuffle
+  for (let i = eligible.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [eligible[i], eligible[j]] = [eligible[j], eligible[i]];
+  }
+
+  const toPlace = Math.min(mines, eligible.length);
+  for (let i = 0; i < toPlace; i++) {
+    const [r, c] = eligible[i];
+    result[r][c].mine = true;
+  }
+
+  // Calculate adjacent mine counts
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      if (result[r][c].mine) continue;
       let count = 0;
       for (let dr = -1; dr <= 1; dr++) {
         for (let dc = -1; dc <= 1; dc++) {
           const nr = r + dr;
           const nc = c + dc;
-          if (nr >= 0 && nr < rows && nc >= 0 && nc < cols && board[nr][nc].mine) {
+          if (nr >= 0 && nr < rows && nc >= 0 && nc < cols && result[nr][nc].mine) {
             count++;
           }
         }
       }
-      board[r][c].adjacentMines = count;
+      result[r][c].adjacentMines = count;
     }
   }
+
+  return result;
 }
 
-function revealCell(board: CellData[][], row: number, col: number) {
-  const rows = board.length;
-  const cols = board[0].length;
-  const cell = board[row][col];
-  if (cell.revealed || cell.flagged) return;
+function revealCells(board: CellData[][], startRow: number, startCol: number): CellData[][] {
+  const result = cloneBoard(board);
+  const rows = result.length;
+  const cols = rows > 0 ? result[0].length : 0;
 
-  cell.revealed = true;
+  // Iterative flood-fill to avoid stack overflow on large boards
+  const stack: [number, number][] = [[startRow, startCol]];
 
-  if (cell.adjacentMines === 0 && !cell.mine) {
-    for (let dr = -1; dr <= 1; dr++) {
-      for (let dc = -1; dc <= 1; dc++) {
-        const nr = row + dr;
-        const nc = col + dc;
-        if (nr >= 0 && nr < rows && nc >= 0 && nc < cols) {
-          revealCell(board, nr, nc);
+  while (stack.length > 0) {
+    const [row, col] = stack.pop()!;
+    const cell = result[row][col];
+    if (cell.revealed || cell.flagged) continue;
+
+    cell.revealed = true;
+
+    if (cell.adjacentMines === 0 && !cell.mine) {
+      for (let dr = -1; dr <= 1; dr++) {
+        for (let dc = -1; dc <= 1; dc++) {
+          const nr = row + dr;
+          const nc = col + dc;
+          if (nr >= 0 && nr < rows && nc >= 0 && nc < cols && !result[nr][nc].revealed) {
+            stack.push([nr, nc]);
+          }
         }
       }
     }
   }
+
+  return result;
 }
 
 function countFlags(board: CellData[][]): number {
@@ -121,22 +151,30 @@ export function MinesweeperGame() {
   });
   const [gameState, setGameState] = useState<GameState>("idle");
   const [time, setTime] = useState(0);
-  const [timerRef, setTimerRef] = useState<ReturnType<typeof setInterval> | null>(null);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const config = difficulties[difficulty];
 
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+      }
+    };
+  }, []);
+
   const startTimer = useCallback(() => {
-    const id = setInterval(() => setTime((t) => t + 1), 1000);
-    setTimerRef(id);
-    return id;
+    if (timerRef.current) clearInterval(timerRef.current);
+    timerRef.current = setInterval(() => setTime((t) => t + 1), 1000);
   }, []);
 
   const stopTimer = useCallback(() => {
-    if (timerRef) {
-      clearInterval(timerRef);
-      setTimerRef(null);
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
     }
-  }, [timerRef]);
+  }, []);
 
   const resetGame = useCallback((diff?: Difficulty) => {
     const d = diff || difficulty;
@@ -144,21 +182,21 @@ export function MinesweeperGame() {
     setBoard(createBoard(rows, cols));
     setGameState("idle");
     setTime(0);
-    if (timerRef) {
-      clearInterval(timerRef);
-      setTimerRef(null);
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
     }
-  }, [difficulty, timerRef]);
+  }, [difficulty]);
 
   function handleClick(row: number, col: number) {
     if (gameState === "won" || gameState === "lost") return;
     const cell = board[row][col];
     if (cell.flagged || cell.revealed) return;
 
-    const newBoard = board.map((r) => r.map((c) => ({ ...c })));
+    let newBoard = cloneBoard(board);
 
     if (gameState === "idle") {
-      placeMines(newBoard, config.mines, row, col);
+      newBoard = placeMinesOnBoard(newBoard, config.mines, row, col);
       setGameState("playing");
       startTimer();
     }
@@ -176,7 +214,7 @@ export function MinesweeperGame() {
       return;
     }
 
-    revealCell(newBoard, row, col);
+    newBoard = revealCells(newBoard, row, col);
     setBoard(newBoard);
 
     if (checkWin(newBoard)) {
@@ -191,7 +229,7 @@ export function MinesweeperGame() {
     const cell = board[row][col];
     if (cell.revealed) return;
 
-    const newBoard = board.map((r) => r.map((c) => ({ ...c })));
+    const newBoard = cloneBoard(board);
     newBoard[row][col].flagged = !newBoard[row][col].flagged;
     setBoard(newBoard);
   }
