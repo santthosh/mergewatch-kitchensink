@@ -32,6 +32,12 @@ function cloneBoard(board: CellData[][]): CellData[][] {
   return board.map((r) => r.map((c) => ({ ...c })));
 }
 
+function secureRandomIndex(max: number): number {
+  const array = new Uint32Array(1);
+  crypto.getRandomValues(array);
+  return array[0] % max;
+}
+
 function placeMinesOnBoard(board: CellData[][], mines: number, safeRow: number, safeCol: number): CellData[][] {
   const result = cloneBoard(board);
   const rows = result.length;
@@ -47,9 +53,9 @@ function placeMinesOnBoard(board: CellData[][], mines: number, safeRow: number, 
     }
   }
 
-  // Fisher-Yates shuffle
+  // Fisher-Yates shuffle with crypto randomness
   for (let i = eligible.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
+    const j = secureRandomIndex(i + 1);
     [eligible[i], eligible[j]] = [eligible[j], eligible[i]];
   }
 
@@ -89,7 +95,9 @@ function revealCells(board: CellData[][], startRow: number, startCol: number): C
   const stack: [number, number][] = [[startRow, startCol]];
 
   while (stack.length > 0) {
-    const [row, col] = stack.pop()!;
+    const popped = stack.pop();
+    if (!popped) continue;
+    const [row, col] = popped;
     const cell = result[row][col];
     if (cell.revealed || cell.flagged) continue;
 
@@ -143,10 +151,10 @@ const numberColors: Record<number, string> = {
 
 type GameState = "idle" | "playing" | "won" | "lost";
 
-export function MinesweeperGame() {
-  const [difficulty, setDifficulty] = useState<Difficulty>("beginner");
+function useMinesweeper(initialDifficulty: Difficulty = "beginner") {
+  const [difficulty, setDifficulty] = useState<Difficulty>(initialDifficulty);
   const [board, setBoard] = useState<CellData[][]>(() => {
-    const { rows, cols } = difficulties[difficulty];
+    const { rows, cols } = difficulties[initialDifficulty];
     return createBoard(rows, cols);
   });
   const [gameState, setGameState] = useState<GameState>("idle");
@@ -188,59 +196,166 @@ export function MinesweeperGame() {
     }
   }, [difficulty]);
 
-  function handleClick(row: number, col: number) {
-    if (gameState === "won" || gameState === "lost") return;
-    const cell = board[row][col];
-    if (cell.flagged || cell.revealed) return;
+  const handleClick = useCallback((row: number, col: number) => {
+    setBoard((prevBoard) => {
+      const cell = prevBoard[row][col];
+      if (cell.flagged || cell.revealed) return prevBoard;
 
-    let newBoard = cloneBoard(board);
+      let newBoard = cloneBoard(prevBoard);
 
-    if (gameState === "idle") {
-      newBoard = placeMinesOnBoard(newBoard, config.mines, row, col);
-      setGameState("playing");
-      startTimer();
-    }
-
-    if (newBoard[row][col].mine) {
-      // Reveal all mines
-      for (const r of newBoard) {
-        for (const c of r) {
-          if (c.mine) c.revealed = true;
-        }
+      if (gameState === "idle") {
+        newBoard = placeMinesOnBoard(newBoard, config.mines, row, col);
+        setGameState("playing");
+        startTimer();
       }
-      setBoard(newBoard);
-      setGameState("lost");
-      stopTimer();
-      return;
-    }
 
-    newBoard = revealCells(newBoard, row, col);
-    setBoard(newBoard);
+      if (newBoard[row][col].mine) {
+        for (const r of newBoard) {
+          for (const c of r) {
+            if (c.mine) c.revealed = true;
+          }
+        }
+        setGameState("lost");
+        stopTimer();
+        return newBoard;
+      }
 
-    if (checkWin(newBoard)) {
-      setGameState("won");
-      stopTimer();
-    }
-  }
+      newBoard = revealCells(newBoard, row, col);
 
-  function handleRightClick(e: React.MouseEvent, row: number, col: number) {
+      if (checkWin(newBoard)) {
+        setGameState("won");
+        stopTimer();
+      }
+
+      return newBoard;
+    });
+  }, [gameState, config.mines, startTimer, stopTimer]);
+
+  const handleRightClick = useCallback((e: React.MouseEvent, row: number, col: number) => {
     e.preventDefault();
     if (gameState === "won" || gameState === "lost") return;
-    const cell = board[row][col];
-    if (cell.revealed) return;
 
-    const newBoard = cloneBoard(board);
-    newBoard[row][col].flagged = !newBoard[row][col].flagged;
-    setBoard(newBoard);
-  }
+    setBoard((prevBoard) => {
+      const cell = prevBoard[row][col];
+      if (cell.revealed) return prevBoard;
+      const newBoard = cloneBoard(prevBoard);
+      newBoard[row][col].flagged = !newBoard[row][col].flagged;
+      return newBoard;
+    });
+  }, [gameState]);
 
-  function handleDifficultyChange(d: Difficulty) {
+  const handleDifficultyChange = useCallback((d: Difficulty) => {
     setDifficulty(d);
     resetGame(d);
-  }
+  }, [resetGame]);
 
   const flagCount = countFlags(board);
   const minesRemaining = config.mines - flagCount;
+
+  return {
+    difficulty,
+    board,
+    gameState,
+    time,
+    config,
+    minesRemaining,
+    resetGame,
+    handleClick,
+    handleRightClick,
+    handleDifficultyChange,
+  };
+}
+
+function StatusBar({ gameState, minesRemaining, time, onReset }: {
+  gameState: GameState;
+  minesRemaining: number;
+  time: number;
+  onReset: () => void;
+}) {
+  return (
+    <div className="flex items-center gap-6 text-sm">
+      <div className="flex items-center gap-1.5 font-mono text-lg font-bold text-red-600 dark:text-red-400 bg-zinc-100 dark:bg-zinc-800 px-3 py-1 rounded-md border border-zinc-200 dark:border-zinc-700">
+        <span>💣</span> {minesRemaining}
+      </div>
+      <button
+        onClick={onReset}
+        className="text-2xl hover:scale-110 transition-transform cursor-pointer"
+        title="New Game"
+      >
+        {gameState === "won" ? "😎" : gameState === "lost" ? "😵" : "🙂"}
+      </button>
+      <div className="flex items-center gap-1.5 font-mono text-lg font-bold text-zinc-700 dark:text-zinc-300 bg-zinc-100 dark:bg-zinc-800 px-3 py-1 rounded-md border border-zinc-200 dark:border-zinc-700">
+        <span>⏱</span> {time}
+      </div>
+    </div>
+  );
+}
+
+function GameBoard({ board, cellSize, onCellClick, onCellRightClick, cols }: {
+  board: CellData[][];
+  cellSize: string;
+  onCellClick: (row: number, col: number) => void;
+  onCellRightClick: (e: React.MouseEvent, row: number, col: number) => void;
+  cols: number;
+}) {
+  return (
+    <div
+      className="inline-grid gap-px bg-zinc-300 dark:bg-zinc-600 border-2 border-zinc-400 dark:border-zinc-500 rounded"
+      style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
+      onContextMenu={(e) => e.preventDefault()}
+    >
+      {board.map((row, r) =>
+        row.map((cell, c) => {
+          let content = "";
+          let cellClasses = `${cellSize} flex items-center justify-center font-bold select-none transition-colors `;
+
+          if (cell.revealed) {
+            if (cell.mine) {
+              content = "💣";
+              cellClasses += "bg-red-200 dark:bg-red-900/50";
+            } else {
+              cellClasses += "bg-zinc-100 dark:bg-zinc-800";
+              if (cell.adjacentMines > 0) {
+                content = String(cell.adjacentMines);
+                cellClasses += ` ${numberColors[cell.adjacentMines] || ""}`;
+              }
+            }
+          } else if (cell.flagged) {
+            content = "🚩";
+            cellClasses += "bg-zinc-200 dark:bg-zinc-700 cursor-pointer hover:bg-zinc-300 dark:hover:bg-zinc-600";
+          } else {
+            cellClasses += "bg-zinc-200 dark:bg-zinc-700 cursor-pointer hover:bg-zinc-300 dark:hover:bg-zinc-600";
+          }
+
+          return (
+            <button
+              key={`${r}-${c}`}
+              className={cellClasses}
+              onClick={() => onCellClick(r, c)}
+              onContextMenu={(e) => onCellRightClick(e, r, c)}
+            >
+              {content}
+            </button>
+          );
+        })
+      )}
+    </div>
+  );
+}
+
+export function MinesweeperGame() {
+  const {
+    difficulty,
+    board,
+    gameState,
+    time,
+    config,
+    minesRemaining,
+    resetGame,
+    handleClick,
+    handleRightClick,
+    handleDifficultyChange,
+  } = useMinesweeper("beginner");
 
   const cellSize = difficulty === "expert" ? "w-7 h-7 text-xs" : "w-8 h-8 text-sm";
 
@@ -262,22 +377,12 @@ export function MinesweeperGame() {
         </select>
       </div>
 
-      {/* Status bar */}
-      <div className="flex items-center gap-6 text-sm">
-        <div className="flex items-center gap-1.5 font-mono text-lg font-bold text-red-600 dark:text-red-400 bg-zinc-100 dark:bg-zinc-800 px-3 py-1 rounded-md border border-zinc-200 dark:border-zinc-700">
-          <span>💣</span> {minesRemaining}
-        </div>
-        <button
-          onClick={() => resetGame()}
-          className="text-2xl hover:scale-110 transition-transform cursor-pointer"
-          title="New Game"
-        >
-          {gameState === "won" ? "😎" : gameState === "lost" ? "😵" : "🙂"}
-        </button>
-        <div className="flex items-center gap-1.5 font-mono text-lg font-bold text-zinc-700 dark:text-zinc-300 bg-zinc-100 dark:bg-zinc-800 px-3 py-1 rounded-md border border-zinc-200 dark:border-zinc-700">
-          <span>⏱</span> {time}
-        </div>
-      </div>
+      <StatusBar
+        gameState={gameState}
+        minesRemaining={minesRemaining}
+        time={time}
+        onReset={() => resetGame()}
+      />
 
       {/* Game state message */}
       {gameState === "won" && (
@@ -296,48 +401,13 @@ export function MinesweeperGame() {
         </p>
       )}
 
-      {/* Board */}
-      <div
-        className="inline-grid gap-px bg-zinc-300 dark:bg-zinc-600 border-2 border-zinc-400 dark:border-zinc-500 rounded"
-        style={{ gridTemplateColumns: `repeat(${config.cols}, minmax(0, 1fr))` }}
-        onContextMenu={(e) => e.preventDefault()}
-      >
-        {board.map((row, r) =>
-          row.map((cell, c) => {
-            let content = "";
-            let cellClasses = `${cellSize} flex items-center justify-center font-bold select-none transition-colors `;
-
-            if (cell.revealed) {
-              if (cell.mine) {
-                content = "💣";
-                cellClasses += "bg-red-200 dark:bg-red-900/50";
-              } else {
-                cellClasses += "bg-zinc-100 dark:bg-zinc-800";
-                if (cell.adjacentMines > 0) {
-                  content = String(cell.adjacentMines);
-                  cellClasses += ` ${numberColors[cell.adjacentMines] || ""}`;
-                }
-              }
-            } else if (cell.flagged) {
-              content = "🚩";
-              cellClasses += "bg-zinc-200 dark:bg-zinc-700 cursor-pointer hover:bg-zinc-300 dark:hover:bg-zinc-600";
-            } else {
-              cellClasses += "bg-zinc-200 dark:bg-zinc-700 cursor-pointer hover:bg-zinc-300 dark:hover:bg-zinc-600";
-            }
-
-            return (
-              <button
-                key={`${r}-${c}`}
-                className={cellClasses}
-                onClick={() => handleClick(r, c)}
-                onContextMenu={(e) => handleRightClick(e, r, c)}
-              >
-                {content}
-              </button>
-            );
-          })
-        )}
-      </div>
+      <GameBoard
+        board={board}
+        cellSize={cellSize}
+        onCellClick={handleClick}
+        onCellRightClick={handleRightClick}
+        cols={config.cols}
+      />
     </div>
   );
 }
