@@ -2,25 +2,30 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 
-const SIZE = 4;
+const GRID_SIZE = 4;
+const WIN_TILE = 2048;
+const TILE_2_PROBABILITY = 0.9;
+const NEW_TILE_VALUES = [2, 4] as const;
+/** Minimum swipe distance in pixels to register as a move */
+const MIN_SWIPE_DISTANCE = 30;
 
 type Board = number[][];
 
 function createEmptyBoard(): Board {
-  return Array.from({ length: SIZE }, () => Array(SIZE).fill(0));
+  return Array.from({ length: GRID_SIZE }, () => Array(GRID_SIZE).fill(0));
 }
 
 function addRandomTile(board: Board): Board {
   const newBoard = board.map((row) => [...row]);
   const empty: [number, number][] = [];
-  for (let r = 0; r < SIZE; r++) {
-    for (let c = 0; c < SIZE; c++) {
+  for (let r = 0; r < GRID_SIZE; r++) {
+    for (let c = 0; c < GRID_SIZE; c++) {
       if (newBoard[r][c] === 0) empty.push([r, c]);
     }
   }
   if (empty.length === 0) return newBoard;
   const [r, c] = empty[Math.floor(Math.random() * empty.length)];
-  newBoard[r][c] = Math.random() < 0.9 ? 2 : 4;
+  newBoard[r][c] = Math.random() < TILE_2_PROBABILITY ? NEW_TILE_VALUES[0] : NEW_TILE_VALUES[1];
   return newBoard;
 }
 
@@ -30,9 +35,9 @@ function initBoard(): Board {
 
 function rotateClockwise(board: Board): Board {
   const result = createEmptyBoard();
-  for (let r = 0; r < SIZE; r++) {
-    for (let c = 0; c < SIZE; c++) {
-      result[c][SIZE - 1 - r] = board[r][c];
+  for (let r = 0; r < GRID_SIZE; r++) {
+    for (let c = 0; c < GRID_SIZE; c++) {
+      result[c][GRID_SIZE - 1 - r] = board[r][c];
     }
   }
   return result;
@@ -43,7 +48,7 @@ function slideLeft(board: Board): { board: Board; score: number; moved: boolean 
   let moved = false;
   const newBoard = createEmptyBoard();
 
-  for (let r = 0; r < SIZE; r++) {
+  for (let r = 0; r < GRID_SIZE; r++) {
     const row = board[r].filter((v) => v !== 0);
     const merged: number[] = [];
 
@@ -58,7 +63,7 @@ function slideLeft(board: Board): { board: Board; score: number; moved: boolean 
       }
     }
 
-    for (let c = 0; c < SIZE; c++) {
+    for (let c = 0; c < GRID_SIZE; c++) {
       newBoard[r][c] = merged[c] || 0;
       if (newBoard[r][c] !== board[r][c]) moved = true;
     }
@@ -82,11 +87,11 @@ function move(board: Board, direction: "left" | "right" | "up" | "down"): { boar
 }
 
 function canMove(board: Board): boolean {
-  for (let r = 0; r < SIZE; r++) {
-    for (let c = 0; c < SIZE; c++) {
+  for (let r = 0; r < GRID_SIZE; r++) {
+    for (let c = 0; c < GRID_SIZE; c++) {
       if (board[r][c] === 0) return true;
-      if (c + 1 < SIZE && board[r][c] === board[r][c + 1]) return true;
-      if (r + 1 < SIZE && board[r][c] === board[r + 1][c]) return true;
+      if (c + 1 < GRID_SIZE && board[r][c] === board[r][c + 1]) return true;
+      if (r + 1 < GRID_SIZE && board[r][c] === board[r + 1][c]) return true;
     }
   }
   return false;
@@ -95,7 +100,7 @@ function canMove(board: Board): boolean {
 function hasWon(board: Board): boolean {
   for (const row of board) {
     for (const cell of row) {
-      if (cell === 2048) return true;
+      if (cell === WIN_TILE) return true;
     }
   }
   return false;
@@ -146,9 +151,11 @@ export function Game2048() {
         if (!result.moved) return prev;
 
         const newBoard = addRandomTile(result.board);
-        const newScore = score + result.score;
-        setScore(newScore);
-        setBestScore((best) => Math.max(best, newScore));
+        setScore((prevScore) => {
+          const newScore = prevScore + result.score;
+          setBestScore((best) => Math.max(best, newScore));
+          return newScore;
+        });
 
         if (!keepPlaying && hasWon(newBoard)) {
           setGameState("won");
@@ -159,7 +166,7 @@ export function Game2048() {
         return newBoard;
       });
     },
-    [gameState, keepPlaying, score]
+    [gameState, keepPlaying]
   );
 
   const resetGame = useCallback(() => {
@@ -205,8 +212,7 @@ export function Game2048() {
       const dy = touch.clientY - touchStartRef.current.y;
       touchStartRef.current = null;
 
-      const minSwipe = 30;
-      if (Math.abs(dx) < minSwipe && Math.abs(dy) < minSwipe) return;
+      if (Math.abs(dx) < MIN_SWIPE_DISTANCE && Math.abs(dy) < MIN_SWIPE_DISTANCE) return;
 
       if (Math.abs(dx) > Math.abs(dy)) {
         handleMove(dx > 0 ? "right" : "left");
