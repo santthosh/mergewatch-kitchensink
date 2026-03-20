@@ -72,9 +72,10 @@ export function SnakeGame() {
     ];
     setSnake(newSnake);
     const newFood = randomFood(newSnake);
-    if (newFood) setFood(newFood);
+    setFood(newFood ?? { x: 15, y: 10 });
     setDirection("RIGHT");
     setScore(0);
+    scoreRef.current = 0;
     setGameState("playing");
   }, []);
 
@@ -95,16 +96,17 @@ export function SnakeGame() {
     }
 
     // Wall collision
+    const currentScore = scoreRef.current;
     if (newHead.x < 0 || newHead.x >= GRID_SIZE || newHead.y < 0 || newHead.y >= GRID_SIZE) {
       setGameState("gameover");
-      setHighScore((prev) => Math.max(prev, scoreRef.current));
+      setHighScore((prev) => Math.max(prev, currentScore));
       return;
     }
 
     // Self collision
     if (currentSnake.some((s) => s.x === newHead.x && s.y === newHead.y)) {
       setGameState("gameover");
-      setHighScore((prev) => Math.max(prev, scoreRef.current));
+      setHighScore((prev) => Math.max(prev, currentScore));
       return;
     }
 
@@ -112,15 +114,17 @@ export function SnakeGame() {
     const ateFood = newHead.x === currentFood.x && newHead.y === currentFood.y;
 
     if (ateFood) {
-      const newScore = scoreRef.current + 1;
-      scoreRef.current = newScore;
-      setScore(newScore);
+      setScore((prev) => {
+        const newScore = prev + 1;
+        scoreRef.current = newScore;
+        return newScore;
+      });
       const nextFood = randomFood(newSnake);
       if (!nextFood) {
-        // Snake filled the entire board — you win!
+        // Snake filled the entire board — game over (win)!
         setSnake(newSnake);
         setGameState("gameover");
-        setHighScore((prev) => Math.max(prev, newScore));
+        setHighScore((prev) => Math.max(prev, currentScore + 1));
         return;
       }
       setFood(nextFood);
@@ -202,7 +206,7 @@ export function SnakeGame() {
     }
     return (x + y) % 2 === 0
       ? "bg-zinc-100 dark:bg-zinc-800"
-      : "bg-zinc-50 dark:bg-zinc-850 dark:bg-zinc-900";
+      : "bg-zinc-50 dark:bg-zinc-900";
   }
 
   return (
