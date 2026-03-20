@@ -3,11 +3,13 @@ import { games, gamesBySlug } from "@/lib/games";
 import { TicTacToeGame } from "@/components/games/tic-tac-toe";
 import { MinesweeperGame } from "@/components/games/minesweeper";
 import { MemoryMatchGame } from "@/components/games/memory-match";
+import { BreakoutGame } from "@/components/games/breakout";
 
 const gameComponents: Record<string, React.ComponentType> = {
   "tic-tac-toe": TicTacToeGame,
   minesweeper: MinesweeperGame,
   "memory-match": MemoryMatchGame,
+  breakout: BreakoutGame,
 };
 
 export function generateStaticParams() {
