@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 
 type Difficulty = "easy" | "medium" | "hard";
 type Board = (number | null)[][];
@@ -62,7 +62,23 @@ function shuffle<T>(array: T[]): T[] {
 
 function generatePuzzle(clues: number): { puzzle: Board; solution: Board } {
   const solution = createEmptyBoard();
-  solveSudoku(solution);
+  const maxAttempts = 10;
+  let solved = false;
+  for (let i = 0; i < maxAttempts; i++) {
+    // Reset board for each attempt
+    for (let r = 0; r < 9; r++) {
+      for (let c = 0; c < 9; c++) {
+        solution[r][c] = null;
+      }
+    }
+    if (solveSudoku(solution)) {
+      solved = true;
+      break;
+    }
+  }
+  if (!solved) {
+    throw new Error("Failed to generate a valid Sudoku puzzle");
+  }
 
   const puzzle = solution.map((row) => [...row]);
   const positions = shuffle(
@@ -121,6 +137,20 @@ export function SudokuGame() {
   const [notes, setNotes] = useState<Set<number>[][]>(
     Array.from({ length: 9 }, () => Array.from({ length: 9 }, () => new Set<number>()))
   );
+
+  const selectedCellRef = useRef(selectedCell);
+  const gameStateRef = useRef(gameState);
+  const initialRef = useRef(initial);
+  const boardRef = useRef(board);
+  const solutionRef = useRef(solution);
+  const notesModeRef = useRef(notesMode);
+
+  selectedCellRef.current = selectedCell;
+  gameStateRef.current = gameState;
+  initialRef.current = initial;
+  boardRef.current = board;
+  solutionRef.current = solution;
+  notesModeRef.current = notesMode;
 
   const initGame = useCallback((diff?: Difficulty) => {
     const d = diff ?? difficulty;
@@ -209,17 +239,60 @@ export function SudokuGame() {
   // Keyboard controls
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
-      if (gameState !== "playing") return;
+      if (gameStateRef.current !== "playing") return;
+      const cell = selectedCellRef.current;
 
       if (e.key >= "1" && e.key <= "9") {
         e.preventDefault();
-        handleNumberInput(parseInt(e.key));
+        const num = parseInt(e.key);
+        if (!cell) return;
+        const [row, col] = cell;
+        if (initialRef.current[row][col] !== null) return;
+
+        if (notesModeRef.current) {
+          setNotes((prev) => {
+            const next = prev.map((r) => r.map((s) => new Set(s)));
+            if (next[row][col].has(num)) {
+              next[row][col].delete(num);
+            } else {
+              next[row][col].add(num);
+            }
+            return next;
+          });
+          return;
+        }
+
+        setBoard((prev) => {
+          const newBoard = prev.map((r) => [...r]);
+          newBoard[row][col] = num;
+          if (boardsMatch(newBoard, solutionRef.current)) {
+            setGameState("won");
+          }
+          return newBoard;
+        });
+        setNotes((prev) => {
+          const next = prev.map((r) => r.map((s) => new Set(s)));
+          next[row][col].clear();
+          return next;
+        });
         return;
       }
 
       if (e.key === "Backspace" || e.key === "Delete" || e.key === "0") {
         e.preventDefault();
-        handleClear();
+        if (!cell) return;
+        const [row, col] = cell;
+        if (initialRef.current[row][col] !== null) return;
+        setBoard((prev) => {
+          const newBoard = prev.map((r) => [...r]);
+          newBoard[row][col] = null;
+          return newBoard;
+        });
+        setNotes((prev) => {
+          const next = prev.map((r) => r.map((s) => new Set(s)));
+          next[row][col].clear();
+          return next;
+        });
         return;
       }
 
@@ -228,8 +301,8 @@ export function SudokuGame() {
         return;
       }
 
-      if (!selectedCell) return;
-      const [row, col] = selectedCell;
+      if (!cell) return;
+      const [row, col] = cell;
       if (e.key === "ArrowUp" && row > 0) setSelectedCell([row - 1, col]);
       if (e.key === "ArrowDown" && row < 8) setSelectedCell([row + 1, col]);
       if (e.key === "ArrowLeft" && col > 0) setSelectedCell([row, col - 1]);
@@ -238,7 +311,7 @@ export function SudokuGame() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  });
+  }, []);
 
   function formatTime(seconds: number) {
     const m = Math.floor(seconds / 60);
