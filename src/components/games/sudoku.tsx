@@ -136,12 +136,13 @@ function hasConflict(board: Board, row: number, col: number): boolean {
 
 export function SudokuGame() {
   const [difficulty, setDifficulty] = useState<Difficulty>("medium");
-  const [initial, setInitial] = useState<Board>(createEmptyBoard());
-  const [board, setBoard] = useState<Board>(createEmptyBoard());
-  const [solution, setSolution] = useState<Board>(createEmptyBoard());
+  const [puzzleData] = useState(() => generatePuzzle(difficultyConfig["medium"]));
+  const [initial, setInitial] = useState<Board>(() => puzzleData.puzzle.map((row) => [...row]));
+  const [board, setBoard] = useState<Board>(() => puzzleData.puzzle.map((row) => [...row]));
+  const [solution, setSolution] = useState<Board>(puzzleData.solution);
   const [selectedCell, setSelectedCell] = useState<[number, number] | null>(null);
   const [gameState, setGameState] = useState<"playing" | "won">("playing");
-  const [startTime, setStartTime] = useState<number>(Date.now());
+  const [startTime, setStartTime] = useState<number>(() => Date.now());
   const [elapsed, setElapsed] = useState(0);
   const [notesMode, setNotesMode] = useState(false);
   const [notes, setNotes] = useState<Set<number>[][]>(
@@ -155,12 +156,14 @@ export function SudokuGame() {
   const solutionRef = useRef(solution);
   const notesModeRef = useRef(notesMode);
 
-  selectedCellRef.current = selectedCell;
-  gameStateRef.current = gameState;
-  initialRef.current = initial;
-  boardRef.current = board;
-  solutionRef.current = solution;
-  notesModeRef.current = notesMode;
+  useEffect(() => {
+    selectedCellRef.current = selectedCell;
+    gameStateRef.current = gameState;
+    initialRef.current = initial;
+    boardRef.current = board;
+    solutionRef.current = solution;
+    notesModeRef.current = notesMode;
+  });
 
   const initGame = useCallback((diff?: Difficulty) => {
     const d = diff ?? difficulty;
@@ -177,10 +180,6 @@ export function SudokuGame() {
       Array.from({ length: 9 }, () => Array.from({ length: 9 }, () => new Set<number>()))
     );
   }, [difficulty]);
-
-  useEffect(() => {
-    initGame();
-  }, [initGame]);
 
   // Timer
   useEffect(() => {

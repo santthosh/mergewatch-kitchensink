@@ -125,20 +125,20 @@ export function TicTacToeGame() {
     computerMoveInProgress.current = false;
   }, []);
 
-  // Handle game over
-  useEffect(() => {
-    if (gameOver) return;
-    if (winner === "X") {
+  function checkAndHandleGameOver(nextBoard: Cell[]) {
+    const w = checkWinner(nextBoard);
+    const draw = !w && getEmptyCells(nextBoard).length === 0;
+    if (w === "X") {
       setScore((s) => ({ ...s, player: s.player + 1 }));
       setGameOver(true);
-    } else if (winner === "O") {
+    } else if (w === "O") {
       setScore((s) => ({ ...s, computer: s.computer + 1 }));
       setGameOver(true);
-    } else if (isDraw) {
+    } else if (draw) {
       setScore((s) => ({ ...s, draws: s.draws + 1 }));
       setGameOver(true);
     }
-  }, [winner, isDraw, gameOver]);
+  }
 
   // Computer move
   useEffect(() => {
@@ -146,22 +146,26 @@ export function TicTacToeGame() {
     if (computerMoveInProgress.current) return;
 
     computerMoveInProgress.current = true;
-    setThinking(true);
-    const timeout = setTimeout(() => {
+    const thinkingTimeout = setTimeout(() => setThinking(true), 0);
+    const moveTimeout = setTimeout(() => {
+      let nextBoard: Cell[] | null = null;
       setBoard((prev) => {
         const move = getComputerMove(prev, difficulty);
         if (move === -1) return prev;
         const next = [...prev];
         next[move] = "O";
+        nextBoard = next;
         return next;
       });
+      if (nextBoard) checkAndHandleGameOver(nextBoard);
       setIsPlayerTurn(true);
       setThinking(false);
       computerMoveInProgress.current = false;
     }, speed);
 
     return () => {
-      clearTimeout(timeout);
+      clearTimeout(thinkingTimeout);
+      clearTimeout(moveTimeout);
       computerMoveInProgress.current = false;
     };
   }, [isPlayerTurn, gameOver, winner, isDraw, difficulty, speed]);
@@ -172,6 +176,7 @@ export function TicTacToeGame() {
     const next = [...board];
     next[index] = "X";
     setBoard(next);
+    checkAndHandleGameOver(next);
     setIsPlayerTurn(false);
   }
 

@@ -57,35 +57,37 @@ export function MemoryMatchGame() {
     hard: null,
   });
   const [gameOver, setGameOver] = useState(false);
-  const [startTime, setStartTime] = useState<number | null>(null);
+  const [started, setStarted] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const checking = useRef(false);
+  const startTimeRef = useRef<number | null>(null);
 
   const totalPairs = difficultyConfig[difficulty].pairs;
   const cols = difficultyConfig[difficulty].cols;
 
   // Timer
   useEffect(() => {
-    if (!startTime || gameOver) return;
+    if (!started || gameOver) return;
+    if (!startTimeRef.current) startTimeRef.current = Date.now();
+    const start = startTimeRef.current;
     const interval = setInterval(() => {
-      setElapsed(Math.floor((Date.now() - startTime) / 1000));
+      setElapsed(Math.floor((Date.now() - start) / 1000));
     }, 1000);
     return () => clearInterval(interval);
-  }, [startTime, gameOver]);
+  }, [started, gameOver]);
 
-  // Check for game over
-  useEffect(() => {
-    if (matchedPairs === totalPairs && totalPairs > 0) {
+  function checkGameOver(newMatchedPairs: number, currentMoves: number) {
+    if (newMatchedPairs === totalPairs && totalPairs > 0) {
       setGameOver(true);
       setBestScores((prev) => {
         const current = prev[difficulty];
-        if (current === null || moves < current) {
-          return { ...prev, [difficulty]: moves };
+        if (current === null || currentMoves < current) {
+          return { ...prev, [difficulty]: currentMoves };
         }
         return prev;
       });
     }
-  }, [matchedPairs, totalPairs, moves, difficulty]);
+  }
 
   const resetGame = useCallback(
     (diff?: Difficulty) => {
@@ -95,7 +97,8 @@ export function MemoryMatchGame() {
       setMoves(0);
       setMatchedPairs(0);
       setGameOver(false);
-      setStartTime(null);
+      setStarted(false);
+      startTimeRef.current = null;
       setElapsed(0);
       checking.current = false;
     },
@@ -108,7 +111,7 @@ export function MemoryMatchGame() {
     if (!card || card.flipped || card.matched) return;
     if (flippedIds.includes(id)) return;
 
-    if (!startTime) setStartTime(Date.now());
+    if (!started) setStarted(true);
 
     const newFlipped = [...flippedIds, id];
     setCards((prev) =>
@@ -125,6 +128,8 @@ export function MemoryMatchGame() {
       const second = cards.find((c) => c.id === secondId)!;
 
       if (first.emoji === second.emoji) {
+        const newMoves = moves + 1;
+        const newMatchedPairs = matchedPairs + 1;
         setTimeout(() => {
           setCards((prev) =>
             prev.map((c) =>
@@ -134,7 +139,8 @@ export function MemoryMatchGame() {
             )
           );
           setFlippedIds([]);
-          setMatchedPairs((p) => p + 1);
+          setMatchedPairs(newMatchedPairs);
+          checkGameOver(newMatchedPairs, newMoves);
           checking.current = false;
         }, 500);
       } else {
