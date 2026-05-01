@@ -1,12 +1,14 @@
 "use client";
 
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef, useSyncExternalStore } from "react";
 
 type Difficulty = "slow" | "normal" | "fast";
 type Direction = "up" | "down" | "left" | "right";
 type Point = { x: number; y: number };
 
 const BOARD_SIZE = 20;
+const BEST_SCORE_KEY = "snake-best-score";
+const BEST_SCORE_EVENT = "snake-best-score-update";
 
 const tickMs: Record<Difficulty, number> = {
   slow: 180,
@@ -27,6 +29,16 @@ const opposite: Record<Direction, Direction> = {
   left: "right",
   right: "left",
 };
+
+const cellCoords: Point[] = (() => {
+  const coords: Point[] = [];
+  for (let y = 0; y < BOARD_SIZE; y++) {
+    for (let x = 0; x < BOARD_SIZE; x++) {
+      coords.push({ x, y });
+    }
+  }
+  return coords;
+})();
 
 function initialSnake(): Point[] {
   const mid = Math.floor(BOARD_SIZE / 2);
@@ -49,26 +61,58 @@ function randomFood(snake: Point[]): Point | null {
   return free[Math.floor(Math.random() * free.length)];
 }
 
+function readBestScore(): number {
+  const stored = window.localStorage.getItem(BEST_SCORE_KEY);
+  if (stored === null) return 0;
+  const n = parseInt(stored, 10);
+  if (Number.isNaN(n)) {
+    console.warn(`Invalid best score in localStorage:`, stored);
+    return 0;
+  }
+  return n;
+}
+
+function writeBestScore(score: number) {
+  window.localStorage.setItem(BEST_SCORE_KEY, String(score));
+  window.dispatchEvent(new Event(BEST_SCORE_EVENT));
+}
+
+function subscribeBestScore(callback: () => void) {
+  const handler = (e: StorageEvent | Event) => {
+    if (e instanceof StorageEvent && e.key !== null && e.key !== BEST_SCORE_KEY) return;
+    callback();
+  };
+  window.addEventListener("storage", handler);
+  window.addEventListener(BEST_SCORE_EVENT, handler);
+  return () => {
+    window.removeEventListener("storage", handler);
+    window.removeEventListener(BEST_SCORE_EVENT, handler);
+  };
+}
+
 export function SnakeGame() {
   const [difficulty, setDifficulty] = useState<Difficulty>("normal");
   const [snake, setSnake] = useState<Point[]>(() => initialSnake());
   const [food, setFood] = useState<Point>(() => randomFood(initialSnake()) ?? { x: 0, y: 0 });
   const [score, setScore] = useState(0);
-  const [bestScore, setBestScore] = useState<number>(() => {
-    if (typeof window === "undefined") return 0;
-    const stored = window.localStorage.getItem("snake-best-score");
-    if (!stored) return 0;
-    const n = parseInt(stored, 10);
-    return Number.isNaN(n) ? 0 : n;
-  });
+  const bestScore = useSyncExternalStore(
+    subscribeBestScore,
+    readBestScore,
+    () => 0,
+  );
   const [gameOver, setGameOver] = useState(false);
   const [won, setWon] = useState(false);
   const [paused, setPaused] = useState(false);
   const [started, setStarted] = useState(false);
 
-  // Refs for the game loop to avoid stale closures
+  // Refs let the game loop read latest values without restarting on every change
   const directionRef = useRef<Direction>("right");
   const queuedDirectionRef = useRef<Direction | null>(null);
+  const foodRef = useRef<Point>(food);
+
+  useEffect(() => {
+    foodRef.current = food;
+  }, [food]);
 
   const resetGame = useCallback(() => {
     const fresh = initialSnake();
@@ -128,7 +172,6 @@ export function SnakeGame() {
         const head = prev[0];
         const newHead = { x: head.x + delta.x, y: head.y + delta.y };
 
-        // Wall collision
         if (
           newHead.x < 0 ||
           newHead.x >= BOARD_SIZE ||
@@ -139,10 +182,10 @@ export function SnakeGame() {
           return prev;
         }
 
-        const eating = newHead.x === food.x && newHead.y === food.y;
+        const currentFood = foodRef.current;
+        const eating = newHead.x === currentFood.x && newHead.y === currentFood.y;
         const body = eating ? prev : prev.slice(0, -1);
 
-        // Self collision
         if (body.some((p) => p.x === newHead.x && p.y === newHead.y)) {
           setGameOver(true);
           return prev;
@@ -153,13 +196,7 @@ export function SnakeGame() {
         if (eating) {
           setScore((s) => {
             const next = s + 1;
-            setBestScore((b) => {
-              if (next > b) {
-                window.localStorage.setItem("snake-best-score", String(next));
-                return next;
-              }
-              return b;
-            });
+            if (next > readBestScore()) writeBestScore(next);
             return next;
           });
           const nextFood = randomFood(newSnake);
@@ -174,7 +211,7 @@ export function SnakeGame() {
       });
     }, tickMs[difficulty]);
     return () => clearInterval(interval);
-  }, [difficulty, started, paused, gameOver, won, food.x, food.y]);
+  }, [difficulty, started, paused, gameOver, won]);
 
   function handleDifficultyChange(d: Difficulty) {
     setDifficulty(d);
@@ -251,9 +288,7 @@ export function SnakeGame() {
           gridTemplateRows: `repeat(${BOARD_SIZE}, 1fr)`,
         }}
       >
-        {Array.from({ length: BOARD_SIZE * BOARD_SIZE }).map((_, i) => {
-          const x = i % BOARD_SIZE;
-          const y = Math.floor(i / BOARD_SIZE);
+        {cellCoords.map(({ x, y }, i) => {
           const isHead = snake[0].x === x && snake[0].y === y;
           const isBody = !isHead && snake.some((p) => p.x === x && p.y === y);
           const isFood = food.x === x && food.y === y && !won;
