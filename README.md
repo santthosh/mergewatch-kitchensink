@@ -16,7 +16,7 @@ A collection of browser-based games built with Next.js, TypeScript, and Tailwind
 | Minesweeper | Playable | Grid-based mine sweeper with flagging and flood fill |
 | Memory Match | Playable | Card-matching game with three difficulty levels and timer |
 | Sudoku | Playable | Puzzle generator with solver, notes mode, and conflict highlighting |
-| Snake | PR Open | Arrow keys / WASD, configurable speed, score tracking |
+| Snake | Playable | Arrow keys / WASD, configurable speed, score tracking |
 | Breakout | PR Open | Canvas-based brick breaker with ball physics |
 | 2048 | Coming Soon | |
 | Tetris | Coming Soon | |
