@@ -4,12 +4,14 @@ import { TicTacToeGame } from "@/components/games/tic-tac-toe";
 import { MinesweeperGame } from "@/components/games/minesweeper";
 import { MemoryMatchGame } from "@/components/games/memory-match";
 import { SudokuGame } from "@/components/games/sudoku";
+import { SnakeGame } from "@/components/games/snake";
 
 const gameComponents: Record<string, React.ComponentType> = {
   "tic-tac-toe": TicTacToeGame,
   minesweeper: MinesweeperGame,
   "memory-match": MemoryMatchGame,
   sudoku: SudokuGame,
+  snake: SnakeGame,
 };
 
 export function generateStaticParams() {
